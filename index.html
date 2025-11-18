@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Código QR Limpio e Instantáneo</title>
+    <!-- Carga de Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- NUEVA LIBRERÍA: qrious.js para un control preciso del QR -->
+    <script src="https://unpkg.com/qrious@4.0.2/dist/qrious.min.js"></script>
+
+    <!-- Configuración del tema de Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#3b82f6',
+                        'primary-blue-dark': '#1d4ed8',
+                        'whatsapp-green': '#10b981',
+                        'whatsapp-green-dark': '#059669',
+                        'web-purple': '#8b5cf6',
+                        'web-purple-dark': '#7c3aed',
+                        'bg-light': '#f8fafc',
+                        'dark-bg': '#0f172a',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilos base */
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            width: 100vw;
+            overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #0f172a;
+            position: relative;
+        }
+
+        /* Contenedor para el efecto plasma */
+        .plasma-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: -1;
+        }
+
+        /* Contenedor principal de la aplicación QR */
+        .main-card-wrapper {
+            max-width: 512px;
+            width: 100%;
+            padding: 2rem;
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: fade-in 0.8s ease-out;
+        }
+
+        /* Estilos del contenido de la tarjeta */
+        .qr-container {
+            min-height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.5s;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Aseguramos que el canvas generado por QRious se vea bien */
+        #qr-canvas {
+            width: 256px !important;
+            height: 256px !important;
+            transition: opacity 0.5s ease-in-out;
+            opacity: 0;
+            /* Inicialmente oculto por JS, pero si no se genera, debe tener 0 de opacidad */
+        }
+        #qr-canvas.visible {
+            opacity: 1;
+        }
+
+        .tab-button {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            font-weight: 600;
+            border-radius: 0.5rem 0.5rem 0 0;
+            padding: 0.75rem 1rem;
+        }
+        .tab-button:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .tab-whatsapp.active {
+            border-color: theme('colors.whatsapp-green');
+            color: theme('colors.whatsapp-green');
+            background: rgba(16, 185, 129, 0.1);
+        }
+        .tab-web.active {
+            border-color: theme('colors.web-purple');
+            color: theme('colors.web-purple');
+            background: rgba(139, 92, 246, 0.1);
+        }
+
+        .download-button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* Estilo para el input */
+        .input-modern {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .input-modern:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+        }
+        .input-modern::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Estilo para el botón de descarga */
+        .download-btn {
+            background: linear-gradient(135deg, theme('colors.primary-blue'), theme('colors.primary-blue-dark'));
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Estilo para el texto */
+        .text-light {
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .text-lighter {
+            color: rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Contenedor para el efecto plasma -->
+    <div class="plasma-container" id="plasma-container"></div>
+
+    <!-- Contenedor Principal de la Aplicación (Centrado) -->
+    <div class="main-card-wrapper mx-4">
+        <h1 class="text-3xl font-extrabold text-white mb-6 text-center">
+            Generador de Código QR Instantáneo
+        </h1>
+        
+        <!-- Contenedor de Selección de Modo (Pestañas) -->
+        <div class="flex border-b border-gray-700 mb-6">
+            
+            <!-- Pestaña de WhatsApp -->
+            <button
+                id="tab-whatsapp"
+                onclick="setMode('whatsapp')"
+                class="tab-button tab-whatsapp active flex-1 text-center text-lighter"
+            >
+                <!-- SVG de WhatsApp moderno (Ícono de chat) -->
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 inline-block mr-2 align-text-bottom">
+                    <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm3.621 13.621a.75.75 0 00.707 0l2-2a.75.75 0 000-1.06l-2-2a.75.75 0 10-1.06 1.06L15.44 12H9.75a.75.75 0 000 1.5h5.69l-1.096 1.096a.75.75 0 101.06 1.06z"/>
+                </svg>
+                QR WhatsApp
+            </button>
+
+            <!-- Pestaña de Web / Texto -->
+            <button
+                id="tab-web"
+                onclick="setMode('web')"
+                class="tab-button tab-web flex-1 text-center text-lighter"
+            >
+                <!-- SVG de Web/Link moderno (Ícono de enlace) -->
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 inline-block mr-2 align-text-bottom">
+                    <path fill-rule="evenodd" d="M19.95 5.584c-.22-.383-.49-.751-.81-1.092A8.96 8.96 0 0012 3C6.477 3 2 7.477 2 13s4.477 10 10 10 10-4.477 10-10c0-1.879-.508-3.64-1.396-5.176zM13 17a1 1 0 10-2 0v-4H7a1 1 0 100 2h4v4zM16 11a1 1 0 11-2 0V7a1 1 0 012 0v4z" clip-rule="evenodd" />
+                </svg>
+                QR Web / Texto
+            </button>
+        </div>
+
+        <!-- Contenedor del Input (Dinámico) -->
+        <div class="space-y-4">
+            <p id="modeDescription" class="text-sm text-lighter">
+                <!-- Se actualiza con JS para dar instrucciones -->
+            </p>
+            <input
+                id="textInput"
+                type="text"
+                class="input-modern w-full p-3 text-lg rounded-lg transition duration-150 ease-in-out"
+                placeholder="Ej: 3460000000 (solo números, sin el +)"
+                oninput="debouncedGenerateQR()" 
+            >
+        </div>
+        
+        <!-- Botón de Descarga -->
+        <div class="text-center mt-6">
+             <button
+                id="downloadButton"
+                onclick="downloadQR()"
+                disabled
+                class="download-btn download-button w-full text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline-block mr-2" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+                Descargar Código QR (PNG)
+            </button>
+        </div>
+
+        <!-- Contenedor del Código QR -->
+        <div class="mt-8">
+            <h2 class="text-xl font-semibold text-white mb-4 text-center">
+                Código Generado
+            </h2>
+
+            <!-- Contenedor donde se dibuja el QR -->
+            <div class="qr-container p-4 mx-auto w-full max-w-xs">
+                <!-- El canvas estará vacío hasta que se genere el QR -->
+                <canvas id="qr-canvas"></canvas>
+            </div>
+
+            <!-- Área de mensajes (para errores o info) -->
+            <p id="message" class="mt-4 text-center text-red-400 hidden text-sm"></p>
+        </div>
+    </div>
+
+    <!-- LÓGICA DE JAVASCRIPT (QR INSTANTÁNEO) -->
+    <script>
+        let qr = null;
+        let currentMode = 'whatsapp';
+        let debounceTimeout; // Variable para el control del debounce
+
+        const textInput = document.getElementById('textInput');
+        const qrCanvas = document.getElementById('qr-canvas');
+        const downloadButton = document.getElementById('downloadButton');
+        const message = document.getElementById('message');
+        const modeDescription = document.getElementById('modeDescription');
+        const tabWhatsapp = document.getElementById('tab-whatsapp');
+        const tabWeb = document.getElementById('tab-web');
+
+        // Función de debounce para limitar la frecuencia de la generación
+        function debouncedGenerateQR() {
+            clearTimeout(debounceTimeout);
+            debounceTimeout = setTimeout(generateQR, 300); // 300ms de espera después de la última pulsación
+        }
+        
+        function setMode(mode) {
+            currentMode = mode;
+            textInput.value = '';
+            
+            // Alternar clases 'active' en las pestañas
+            tabWhatsapp.classList.remove('active');
+            tabWeb.classList.remove('active');
+            
+            if (mode === 'whatsapp') {
+                tabWhatsapp.classList.add('active');
+                textInput.placeholder = 'Ej: 3460000000 (solo números, sin el +)';
+                textInput.classList.remove('focus:ring-web-purple');
+                textInput.classList.add('focus:ring-whatsapp-green');
+                modeDescription.textContent = 'Generará un enlace directo de WhatsApp (wa.me/). Solo introduce el número con el código de país.';
+            } else {
+                tabWeb.classList.add('active');
+                textInput.placeholder = 'Ej: rosreyrj.vercel.app o ¡Hola Mundo!';
+                textInput.classList.remove('focus:ring-whatsapp-green');
+                textInput.classList.add('focus:ring-web-purple');
+                modeDescription.textContent = 'Generará un código QR para cualquier URL, enlace o texto plano. Se usará el contenido tal cual lo escribas.';
+            }
+            clearQR();
+        }
+
+        function clearQR() {
+            // Oculta el canvas
+            qrCanvas.classList.remove('visible');
+            qr = null; // Reiniciar la instancia
+            downloadButton.disabled = true;
+            message.classList.add('hidden');
+        }
+
+        function generateQR() {
+            let data = textInput.value.trim();
+            message.textContent = "";
+            message.classList.add('hidden');
+
+            if (data === "") {
+                clearQR();
+                return; // No hacer nada si está vacío
+            }
+
+            if (currentMode === 'whatsapp') {
+                const phoneNumber = data.replace(/[^0-9]/g, '');
+                if (phoneNumber.length < 5) { 
+                    // No hacemos nada si el número es muy corto, simplemente no generamos el QR.
+                    qrCanvas.classList.remove('visible');
+                    downloadButton.disabled = true;
+                    return;
+                }
+                data = `https://wa.me/${phoneNumber}`;
+            } 
+            
+            try {
+                // Crear o actualizar la instancia de QRious
+                if (qr) {
+                    qr.value = data;
+                    qr.level = 'L'; // Asegurar el nivel de corrección bajo
+                } else {
+                    qr = new QRious({
+                        element: qrCanvas, // Usar el canvas definido en el HTML
+                        value: data,
+                        size: 256,
+                        // Nivel 'L' (Low) es el que genera los patrones más limpios (menos puntos).
+                        level: 'L', 
+                        // Color del fondo
+                        background: 'white', 
+                        // Borde de 10 píxeles, ayuda a escanear mejor y se ve más limpio
+                        padding: 10 
+                    });
+                }
+
+                // Pequeño retraso para la animación de opacidad
+                setTimeout(() => {
+                    qrCanvas.classList.add('visible');
+                    downloadButton.disabled = false;
+                }, 100); 
+
+            } catch (error) {
+                message.textContent = "Error al generar el código QR. Intente con otro contenido.";
+                message.classList.remove('hidden');
+                downloadButton.disabled = true;
+            }
+        }
+
+        function downloadQR() {
+            if (!qr) {
+                message.textContent = "El código QR es inválido o el campo está vacío.";
+                message.classList.remove('hidden');
+                return;
+            }
+
+            // QRious permite obtener la URL de datos directamente
+            // Le forzamos un tamaño mayor (512) para una descarga de alta resolución, aunque el canvas sea 256
+            const dataURL = qr.toDataURL('image/png', 512); 
+            
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = `QR_Code_Limpio_${Date.now()}.png`;
+
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+        // --- Hacemos las funciones accesibles globalmente ---
+        window.setMode = setMode;
+        window.generateQR = generateQR;
+        window.downloadQR = downloadQR;
+        window.debouncedGenerateQR = debouncedGenerateQR;
+        
+        // Implementación del efecto Plasma (WebGL) para el fondo estético
+        function initPlasma() {
+            const container = document.getElementById('plasma-container');
+            
+            // Crear el canvas
+            const canvas = document.createElement('canvas');
+            canvas.style.display = 'block';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            container.appendChild(canvas);
+            
+            const gl = canvas.getContext('webgl2');
+            if (!gl) {
+                console.error('WebGL 2 no está disponible');
+                return;
+            }
+            
+            // Configuración del renderer
+            const renderer = {
+                gl: gl,
+                setSize: function(width, height) {
+                    canvas.width = width;
+                    canvas.height = height;
+                    gl.viewport(0, 0, width, height);
+                }
+            };
+            
+            // Vertex shader
+            const vertex = `#version 300 es
+            precision highp float;
+            in vec2 position;
+            in vec2 uv;
+            out vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = vec4(position, 0.0, 1.0);
+            }`;
+            
+            // Fragment shader
+            const fragment = `#version 300 es
+            precision highp float;
+            uniform vec2 iResolution;
+            uniform float iTime;
+            uniform vec3 uCustomColor;
+            uniform float uUseCustomColor;
+            uniform float uSpeed;
+            uniform float uDirection;
+            uniform float uScale;
+            uniform float uOpacity;
+            uniform vec2 uMouse;
+            uniform float uMouseInteractive;
+            out vec4 fragColor;
+
+            void mainImage(out vec4 o, vec2 C) {
+              vec2 center = iResolution.xy * 0.5;
+              C = (C - center) / uScale + center;
+              
+              vec2 mouseOffset = (uMouse - center) * 0.0002;
+              C += mouseOffset * length(C - center) * step(0.5, uMouseInteractive);
+              
+              float i, d, z, T = iTime * uSpeed * uDirection;
+              vec3 O, p, S;
+
+              for (vec2 r = iResolution.xy, Q; ++i < 60.; O += o.w/d*o.xyz) {
+                p = z*normalize(vec3(C-.5*r,r.y)); 
+                p.z -= 4.; 
+                S = p;
+                d = p.y-T;
+                
+                p.x += .4*(1.+p.y)*sin(d + p.x*0.1)*cos(.34*d + p.x*0.05); 
+                Q = p.xz *= mat2(cos(p.y+vec4(0,11,33,0)-T)); 
+                z+= d = abs(sqrt(length(Q*Q)) - .25*(5.+S.y))/3.+8e-4; 
+                o = 1.+sin(S.y+p.z*.5+S.z-length(S-p)+vec4(2,1,0,8));
+              }
+              
+              o.xyz = tanh(O/1e4);
+            }
+
+            bool finite1(float x){ return !(isnan(x) || isinf(x)); }
+            vec3 sanitize(vec3 c){
+              return vec3(
+                finite1(c.r) ? c.r : 0.0,
+                finite1(c.g) ? c.g : 0.0,
+                finite1(c.b) ? c.b : 0.0
+              );
+            }
+
+            void main() {
+              vec4 o = vec4(0.0);
+              mainImage(o, gl_FragCoord.xy);
+              vec3 rgb = sanitize(o.rgb);
+              
+              // Ajustar el color del plasma a un tono más frío (Azul/Púrpura) para complementar los botones
+              vec3 customColor = vec3(0.3, 0.4, 1.0); // Azul purpura suave
+              float intensity = (rgb.r + rgb.g + rgb.b) / 3.0;
+              vec3 finalColor = intensity * customColor;
+              
+              float alpha = length(rgb) * uOpacity * 0.7; // Reducir opacidad para más suavidad
+              fragColor = vec4(finalColor, alpha);
+            }`;
+            
+            // Crear geometría (triángulo que cubre toda la pantalla)
+            const geometry = {
+                attributes: {
+                    position: { size: 2, data: new Float32Array([-1, -1, 3, -1, -1, 3]) },
+                    uv: { size: 2, data: new Float32Array([0, 0, 2, 0, 0, 2]) }
+                }
+            };
+            
+            // Crear programa
+            const program = gl.createProgram();
+            const vs = gl.createShader(gl.VERTEX_SHADER);
+            const fs = gl.createShader(gl.FRAGMENT_SHADER);
+            
+            gl.shaderSource(vs, vertex);
+            gl.shaderSource(fs, fragment);
+            gl.compileShader(vs);
+            gl.compileShader(fs);
+            
+            if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+                console.error('VS ERROR:', gl.getShaderInfoLog(vs));
+            }
+            if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+                console.error('FS ERROR:', gl.getShaderInfoLog(fs));
+            }
+            
+            gl.attachShader(program, vs);
+            gl.attachShader(program, fs);
+            gl.linkProgram(program);
+            
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error('LINK ERROR:', gl.getProgramInfoLog(program));
+            }
+            
+            gl.useProgram(program);
+            
+            // Configurar atributos
+            const positionAttribute = gl.getAttribLocation(program, 'position');
+            const uvAttribute = gl.getAttribLocation(program, 'uv');
+            
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, geometry.attributes.position.data, gl.STATIC_DRAW);
+            
+            const uvBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, geometry.attributes.uv.data, gl.STATIC_DRAW);
+            
+            // Configurar uniforms
+            const iResolutionUniform = gl.getUniformLocation(program, 'iResolution');
+            const iTimeUniform = gl.getUniformLocation(program, 'iTime');
+            const uCustomColorUniform = gl.getUniformLocation(program, 'uCustomColor');
+            const uUseCustomColorUniform = gl.getUniformLocation(program, 'uUseCustomColor');
+            const uSpeedUniform = gl.getUniformLocation(program, 'uSpeed');
+            const uDirectionUniform = gl.getUniformLocation(program, 'uDirection');
+            const uScaleUniform = gl.getUniformLocation(program, 'uScale');
+            const uOpacityUniform = gl.getUniformLocation(program, 'uOpacity');
+            const uMouseUniform = gl.getUniformLocation(program, 'uMouse');
+            const uMouseInteractiveUniform = gl.getUniformLocation(program, 'uMouseInteractive');
+            
+            // Configurar valores iniciales (usando tus parámetros)
+            gl.uniform3f(uCustomColorUniform, 0.3, 0.4, 1.0); // Tono frío
+            gl.uniform1f(uUseCustomColorUniform, 1.0);
+            gl.uniform1f(uSpeedUniform, 0.6 * 0.4);
+            gl.uniform1f(uDirectionUniform, 1.0); // forward
+            gl.uniform1f(uScaleUniform, 1.1);
+            gl.uniform1f(uOpacityUniform, 0.7); // Opacidad más baja
+            gl.uniform1f(uMouseInteractiveUniform, 1.0);
+            
+            let mouseX = 0, mouseY = 0;
+            
+            // Manejar movimiento del mouse
+            document.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                gl.uniform2f(uMouseUniform, mouseX, mouseY);
+            });
+            
+            // Configurar tamaño inicial y en resize
+            const setSize = () => {
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                renderer.setSize(width, height);
+                gl.uniform2f(iResolutionUniform, width, height);
+            };
+            
+            setSize();
+            window.addEventListener('resize', setSize);
+            
+            // Bucle de animación
+            let startTime = performance.now();
+            
+            function animate() {
+                const currentTime = performance.now();
+                const elapsedTime = (currentTime - startTime) * 0.001;
+                
+                gl.uniform1f(iTimeUniform, elapsedTime);
+                
+                // Renderizar
+                gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+                gl.enableVertexAttribArray(positionAttribute);
+                gl.vertexAttribPointer(positionAttribute, 2, gl.FLOAT, false, 0, 0);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer);
+                gl.enableVertexAttribArray(uvAttribute);
+                gl.vertexAttribPointer(uvAttribute, 2, gl.FLOAT, false, 0, 0);
+                
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                
+                requestAnimationFrame(animate);
+            }
+            
+            // Iniciar la animación al cargar la ventana
+            window.onload = function () {
+                animate();
+            };
+        }
+
+        // Inicializa la interfaz al cargar la página
+        window.addEventListener('DOMContentLoaded', () => {
+            setMode('whatsapp');
+            initPlasma();
+        });
+    </script>
+</body>
+</html>
